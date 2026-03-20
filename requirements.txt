@@ -4,4 +4,4 @@ matplotlib
 shapely
 pyogrio
 cartopy
-plotry
+plotly
