@@ -15,7 +15,7 @@ st.title("🌎 Professional Sphere Map Viewer")
 
 # 2. 데이터 로드 (클리핑 및 최적화 완료)
 current_folder = os.path.dirname(os.path.abspath(__file__))
-land_path = os.path.join(current_folder, "ne_10m_land.shp")
+land_path = os.path.join(current_folder, "ne_110m_land.shp")
 
 @st.cache_data
 def load_data():
