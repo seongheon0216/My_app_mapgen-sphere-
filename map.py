@@ -7,7 +7,39 @@ import cartopy.crs as ccrs
 from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 import matplotlib.ticker as mticker
 
-# ... (상단 데이터 로드 및 사이드바 설정 부분은 동일) ...
+# 1. 페이지 설정
+st.set_page_config(page_title="Stable Sphere Viewer", layout="wide")
+st.title("🌍 Professional Sphere Map (Clean Grid)")
+
+# 2. 데이터 로드 (경로 에러 방지 포함)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+land_path = os.path.join(current_dir, "ne_110m_land.shp")
+
+@st.cache_data
+def load_data():
+    if os.path.exists(land_path):
+        return gpd.read_file(land_path)
+    return None
+
+world_land = load_data()
+
+# 3. 사이드바 설정
+with st.sidebar:
+    st.header("🛠️ View Settings")
+    view_lat = st.slider("View Latitude", -90.0, 90.0, 38.0, step=1.0)
+    view_lon = st.slider("View Longitude", -180.0, 180.0, 127.0, step=1.0)
+    
+    st.divider()
+    
+    st.subheader("📏 Grid Intervals")
+    lon_interval = st.select_slider("Lon Interval", options=[5, 10, 15, 30, 45], value=15)
+    lat_interval = st.select_slider("Lat Interval", options=[5, 10, 15, 30, 45], value=15)
+
+    st.divider()
+    
+    st.subheader("🎨 Appearance")
+    show_coast = st.checkbox("Show Coastline (Edge)", value=True)
+    c_alpha = st.slider("Opacity", 0.0, 1.0, 0.4) if show_coast else 1.0
 
 if world_land is not None:
     my_globe = ccrs.Globe(ellipse='sphere')
