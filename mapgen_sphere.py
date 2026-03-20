@@ -10,7 +10,7 @@ import numpy as np
 
 # 1. 페이지 설정
 st.set_page_config(page_title="Pro Sphere Map Viewer", layout="wide")
-st.title("🌎 Professional Sphere Map Viewer")
+st.title("Sphere Map Generator")
 
 # 2. 데이터 로드 (경로 문제 해결 버전)
 @st.cache_data
