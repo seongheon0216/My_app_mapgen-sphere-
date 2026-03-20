@@ -4,100 +4,93 @@ import matplotlib.pyplot as plt
 import os
 import io
 import cartopy.crs as ccrs
+from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+import matplotlib.ticker as mticker
 import numpy as np
 
 # 1. 페이지 설정
-st.set_page_config(page_title="Smooth Sphere Map", layout="wide")
-st.title("🌎 Professional Sphere Map (Smooth Grid)")
+st.set_page_config(page_title="Pro Sphere Map Viewer", layout="wide")
+st.title("🌎 Professional Sphere Map Viewer")
 
-# 2. 데이터 로드 (경로 에러 방지)
+# 2. 데이터 로드 (경로 문제 해결 버전)
 @st.cache_data
 def load_data():
+    # 파일명 리스트 (image_c42471.png 확인 결과 110m 버전 존재)
     target_file = "ne_110m_land.shp"
+    
+    # 🛠️ 해결책: 현재 스크립트 위치뿐만 아니라 작업 디렉토리 전체에서 탐색
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(current_dir, target_file)
-    if os.path.exists(path):
-        return gpd.read_file(path)
-    # 파일이 없으면 직접 작업 디렉토리에서 재시도
-    if os.path.exists(target_file):
-        return gpd.read_file(target_file)
+    working_dir = os.getcwd()
+    
+    paths_to_check = [
+        os.path.join(current_dir, target_file),
+        os.path.join(working_dir, target_file),
+        target_file  # 상대 경로 직접 지정
+    ]
+    
+    for path in paths_to_check:
+        if os.path.exists(path):
+            try:
+                return gpd.read_file(path)
+            except Exception as e:
+                st.error(f"파일 로드 중 오류 발생: {e}")
     return None
 
 world_land = load_data()
 
-# 3. 사이드바 설정
+# 3. 사이드바 설정 (회전 및 테두리 제어)
 with st.sidebar:
-    st.header("🛠️ Settings")
+    st.header("🛠️ View Settings")
     view_lat = st.slider("View Latitude", -90.0, 90.0, 38.0, step=1.0)
     view_lon = st.slider("View Longitude", -180.0, 180.0, 127.0, step=1.0)
     
     st.divider()
     
-    grid_step = st.select_slider("Grid Interval", options=[5, 10, 15, 30], value=15)
+    st.subheader("📏 Grid Intervals (5° Step)")
+    show_grid = st.radio("Show Grid Lines", ("Y", "N"), index=0)
+    lon_interval = st.select_slider("Longitude Interval", options=[5, 10, 15, 30], value=10)
+    lat_interval = st.select_slider("Latitude Interval", options=[5, 10, 15, 30], value=10)
 
     st.divider()
     
-    show_coast = st.checkbox("Show Coastline (Edge)", value=True)
-    c_alpha = st.slider("Coastline Opacity", 0.0, 1.0, 0.4) if show_coast else 1.0
+    st.subheader("🎨 Appearance Settings")
+    show_coastline = st.checkbox("Show Coastline (Edge)", value=True)
+    coastline_alpha = st.slider("Coastline Opacity", 0.0, 1.0, 0.4, step=0.1) if show_coastline else 1.0
+    coastline_width = st.slider("Coastline Width", 0.1, 1.0, 0.5, step=0.1) if show_coastline else 0.5
 
-# 4. 지도 생성 및 에러 우회 로직
+# 4. 지도 생성 로직
 if world_land is not None:
-    # Sphere 설정
     my_globe = ccrs.Globe(ellipse='sphere')
     target_crs = ccrs.Orthographic(central_longitude=view_lon, central_latitude=view_lat, globe=my_globe)
 
-    fig = plt.figure(figsize=(10, 10))
+    fig = plt.figure(figsize=(12, 8), dpi=100)
     ax = fig.add_subplot(1, 1, 1, projection=target_crs)
-    ax.set_global()
     ax.set_facecolor('#FFFFFF')
 
-    # 육지 그리기 (E8E8E8 회색 육지)
+    # 육지 그리기 (회색 육지 + 사용자 설정 해안선)
     world_land.plot(ax=ax, transform=ccrs.PlateCarree(), 
                     color='#E8E8E8', 
-                    edgecolor='#000000' if show_coast else (0,0,0,0), 
-                    linewidth=0.5, alpha=c_alpha, zorder=2)
+                    edgecolor='#000000' if show_coastline else (0,0,0,0), 
+                    linewidth=coastline_width,
+                    alpha=coastline_alpha)
 
-    # 🛠️ 해결책: 촘촘하게 계산하여 부드러운 '곡선' 수동 격자선 그리기
-    # 격자선의 정밀도를 결정하는 샘플링 개수 (높을수록 부드럽습니다)
-    n_sample = 361 # 1도 단위로 계산
+    # 격자선 설정
+    if show_grid == 'Y':
+        gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, 
+                          linestyle='-', linewidth=0.6, color='#AAAAAA', alpha=0.5)
+        gl.top_labels = gl.right_labels = False
+        gl.xformatter, gl.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+        gl.xlocator = mticker.MultipleLocator(lon_interval)
+        gl.ylocator = mticker.MultipleLocator(lat_interval)
 
-    try:
-        # 위도선 그리기
-        for lat in np.arange(-90, 91, grid_step):
-            # 위도 고정, 경도를 361개로 조밀하게 채움
-            lon_line = np.linspace(-180, 180, n_sample)
-            lat_line = np.full(n_sample, lat)
-            ax.plot(lon_line, lat_line, color='gray', linewidth=0.5, 
-                    alpha=0.3, transform=ccrs.PlateCarree(), zorder=1)
+    st.pyplot(fig, clear_figure=True)
 
-        # 경도선 그리기
-        for lon in np.arange(-180, 181, grid_step):
-            # 경도 고정, 위도를 361개로 조밀하게 채움
-            lat_line = np.linspace(-90, 90, n_sample)
-            lon_line = np.full(n_sample, lon)
-            ax.plot(lon_line, lat_line, color='gray', linewidth=0.5, 
-                    alpha=0.3, transform=ccrs.PlateCarree(), zorder=1)
-    except Exception as e:
-        # 혹시 수동 격자선 그리기에서 충돌이 나면 지도는 계속 생성
-        st.warning(f"격자선 렌더링 중 경고가 발생했으나 지도는 계속 생성합니다: {e}")
-
-    # 지구 테두리 원형 강조
-    ax.spines['geo'].set_linewidth(1.5)
-
-    # 🛠️ PNG 빈 화면 해결: st.pyplot 호출 전에 '먼저' 버퍼에 저장
+    # 300 DPI 이미지 다운로드
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=300, bbox_inches='tight', facecolor='white')
-    img_data = buf.getvalue()
+    fig.savefig(buf, format="png", bbox_inches='tight', dpi=300, facecolor='#FFFFFF')
+    st.download_button(label="📥 Download Map (300 DPI)", data=buf.getvalue(), file_name="sphere_map_300dpi.png")
 
-    # 화면 표시
-    st.pyplot(fig)
-
-    # 다운로드 버튼
-    st.download_button(
-        label="📥 Download Map (300 DPI)",
-        data=img_data,
-        file_name="sphere_map_300dpi.png",
-        mime="image/png"
-    )
 else:
-    st.error("⚠️ 데이터 파일을 찾을 수 없습니다. (ne_110m_land.shp 확인)")
+    # 🛠️ 에러 발생 시 파일 목록을 출력하여 디버깅 도와줌
+    st.error("⚠️ 데이터 파일을 찾을 수 없습니다.")
+    st.write("현재 폴더 파일 목록:", os.listdir(os.getcwd()))
