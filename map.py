@@ -77,7 +77,7 @@ if world_land is not None:
     # 🛠️ 요청사항: 국가 경계선 표시 (사용자가 선택했을 때만 그리기)
     if show_countries:
         # 국가 경계선 데이터가 필요합니다 (기본적으로 ne_10m_admin_0_countries.shp 등)
-        country_path = os.path.join(current_folder, "ne_10m_admin_0_countries.shp")
+        country_path = os.path.join(current_folder, "ne_110m_admin_0_countries.shp")
         if os.path.exists(country_path):
             countries = gpd.read_file(country_path)
             countries.plot(ax=ax, transform=ccrs.PlateCarree(), 
@@ -103,4 +103,4 @@ if world_land is not None:
     st.download_button(label="📥 Download Map (300 DPI)", data=buf.getvalue(), file_name="professional_map.png")
 
 else:
-    st.error("⚠️ 데이터 파일(ne_10m_land.shp)이 같은 폴더에 없습니다.")
+    st.error("⚠️ 데이터 파일(ne_110m_land.shp)이 같은 폴더에 없습니다.")
