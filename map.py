@@ -1,89 +1,95 @@
+import streamlit as st
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import os
-from shapely.geometry import box
-from matplotlib.ticker import MultipleLocator
+import cartopy.crs as ccrs
+import io
 
-# 현재 폴더 경로 설정
+# 1. 페이지 설정 및 제목
+st.set_page_config(page_title="Interactive Globe Generator", layout="wide")
+st.title("🌐 Interactive Sphere Globe (110m)")
+st.markdown("---")
+
+# 2. 데이터 로드 (지구본 깨짐 방지를 위해 110m 사용)
 current_folder = os.path.dirname(os.path.abspath(__file__))
-land_path = os.path.join(current_folder, "ne_10m_land.shp")
+# 파일 이름이 ne_110m_land.shp 인지 확인해주세요.
+land_110m = os.path.join(current_folder, "ne_110m_land.shp")
 
-def generate_exam_final_map():
-    if not os.path.exists(land_path):
-        print(f"에러: '{land_path}' 파일을 찾을 수 없습니다.")
-        return
+@st.cache_data
+def load_data(path):
+    if os.path.exists(path):
+        gdf = gpd.read_file(path)
+        # 구형 투영 시 대륙 깨짐 방지를 위한 버퍼 처리 ( buffer(0) )
+        gdf['geometry'] = gdf.geometry.buffer(0)
+        return gdf
+    return None
 
-    # 1. 사용자 입력
-    print("--- 수능/교과서 스타일 지도 생성기 ---")
-    try:
-        lon_min = float(input("최소 경도 (예: 110): "))
-        lon_max = float(input("최대 경도 (예: 150): "))
-        lat_min = float(input("최소 위도 (예: 20): "))
-        lat_max = float(input("최대 위도 (예: 55): "))
-        
-        show_grid = input("실선 격자선을 표시할까요? (Y/N): ").upper()
-    except ValueError:
-        print("에러: 숫자만 입력해주세요.")
-        return
+world_land = load_data(land_110m)
 
-    # 2. 데이터 처리
-    world_land = gpd.read_file(land_path)
-    scope = box(lon_min, lat_min, lon_max, lat_max)
-    target_land = world_land.clip(scope)
-
-    # 3. 그래프 설정
-    fig, ax = plt.subplots(figsize=(10, 8), dpi=300)
-    ax.set_facecolor('#FFFFFF') # 바다: 흰색
-
-    # 4. 육지 그리기 (연한 회색, 선 없음)
-    if not target_land.empty:
-        target_land.plot(ax=ax, color='#E0E0E0', edgecolor='none') # 육지: 회색
-
-    # 5. 범위 및 격자 설정
-    ax.set_xlim(lon_min, lon_max)
-    ax.set_ylim(lat_min, lat_max)
-
-    if show_grid == 'Y':
-        # 격자선을 '실선(-)'으로 설정
-        ax.grid(True, linestyle='-', linewidth=0.5, color='#AAAAAA', zorder=0)
-        
-        # 숫자는 숨기고 눈금만 남기거나 포맷만 변경
-        ax.tick_params(axis='both', which='both', length=0) # 눈금 표시 제거
-        
-        # 동경/서경, 북위/남위 구분 라벨 설정
-        def lon_formatter(x, pos):
-            if x > 0: return f'{int(x)}°E'
-            elif x < 0: return f'{int(abs(x))}°W'
-            else: return '0°'
-
-        def lat_formatter(x, pos):
-            if x > 0: return f'{int(x)}°N'
-            elif x < 0: return f'{int(abs(x))}°S'
-            else: return 'EQ'
-
-        ax.xaxis.set_major_formatter(plt.FuncFormatter(lon_formatter))
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lat_formatter))
-        
-        # 격자 간격 (자동으로 10도 단위 설정, 원하시면 수정 가능)
-        ax.xaxis.set_major_locator(MultipleLocator(10))
-        ax.yaxis.set_major_locator(MultipleLocator(10))
-        
-        # 숫자 크기를 아주 작게 하거나, 필요 없다면 아래 줄을 활성화해서 숫자를 아예 지우세요.
-        # plt.setp(ax.get_xticklabels(), visible=False) 
-        # plt.setp(ax.get_yticklabels(), visible=False)
-    else:
-        ax.set_axis_off()
-
-    # 6. 저장
-    output_name = 'final_exam_style_map.png'
-    save_path = os.path.join(current_folder, output_name)
+# 3. 사이드바 설정 (정면 좌표 입력)
+with st.sidebar:
+    st.header("🛠️ Globe Settings")
+    st.subheader("📍 Center Position (Front View)")
+    # 사용자가 입력한 좌표를 정면으로 바라봅니다.
+    lon_center = st.number_input("Center Longitude", value=127.0, min_value=-180.0, max_value=180.0)
+    lat_center = st.number_input("Center Latitude", value=37.5, min_value=-90.0, max_value=90.0)
     
-    plt.tight_layout()
-    plt.savefig(save_path, bbox_inches='tight', pad_inches=0.2, facecolor='#FFFFFF')
+    st.divider()
     
-    print("-" * 30)
-    print(f"저장 완료! 방위가 표시된 지도가 생성되었습니다: {save_path}")
-    plt.show()
+    st.subheader("📏 Grid & Design")
+    # 지구본이라 격자 간격은 넓게 가져갑니다.
+    grid_interval = st.select_slider("Grid Interval (deg)", options=[10, 15, 20, 30], value=30)
+    
+    # 정면 위치에 점 표시 여부
+    show_point = st.checkbox("Show Center Point", value=True)
 
-if __name__ == "__main__":
-    generate_exam_final_map()
+# 4. 지도 생성 메인 로직
+if world_land is not None:
+    # --- 투영법 설정: Orthographic (지구본) ---
+    # 사용자가 입력한 좌표(central_longitude, central_latitude)를 지구의 정면으로 설정합니다.
+    target_crs = ccrs.Orthographic(central_longitude=lon_center, central_latitude=lat_center)
+
+    # 도화지 생성 (지구본이니까 정사각형 비율)
+    fig = plt.figure(figsize=(10, 10), dpi=100)
+    ax = fig.add_subplot(1, 1, 1, projection=target_crs)
+
+    # 지구본 전체(Global)를 보여줍니다.
+    ax.set_global()
+    
+    # 배경 및 바다색 (옵션: 바다색을 연한 파란색으로 하려면 '#E0F7FA')
+    ax.set_facecolor('#FFFFFF')
+
+    # --- 그리기 ---
+    # 육지 그리기 (저해상도라 빠름)
+    world_land.plot(ax=ax, transform=ccrs.PlateCarree(), 
+                    color='#E0E0E0', edgecolor='#AAAAAA', linewidth=0.3)
+    
+    # 격자선 (구형 좌표 기준)
+    ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=False, 
+                 linestyle='--', linewidth=0.5, color='#AAAAAA', alpha=0.7)
+
+    # (옵션) 지구 외곽선(테두리) 그리기
+    # ax.add_feature(cartopy.feature.OCEAN, facecolor='none', edgecolor='black', linewidth=1)
+
+    # 정면 좌표에 점 표시 (입력한 위치 확인용)
+    if show_point:
+        ax.plot(lon_center, lat_center, marker='o', color='#FF6F00', markersize=8, 
+                transform=ccrs.PlateCarree(), zorder=10, label='Center')
+        # ax.legend(loc='lower right')
+
+    # 5. 결과 표시 및 고해상도 다운로드
+    st.pyplot(fig, clear_figure=True)
+
+    # 다운로드 시에만 300 DPI 렌더링 (일러스트 작업용)
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches='tight', dpi=300, facecolor='#FFFFFF', pad_inches=0.1)
+    
+    st.download_button(
+        label=f"📥 Download High-Res Globe (300 DPI PNG)",
+        data=buf.getvalue(),
+        file_name=f"globe_{lon_center:.1f}_{lat_center:.1f}_300dpi.png",
+        mime="image/png"
+    )
+else:
+    st.error("⚠️ 110m 데이터 파일(ne_110m_land.shp)을 찾을 수 없습니다.")
+    st.info("💡 ne_110m_land.shp, ne_110m_land.shx, ne_110m_land.dbf 파일이 같은 폴더에 있어야 합니다.")
