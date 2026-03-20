@@ -1,95 +1,50 @@
 import streamlit as st
-import geopandas as gpd
-import matplotlib.pyplot as plt
-import os
-import cartopy.crs as ccrs
-import io
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
 
-# 1. 페이지 설정 및 제목
-st.set_page_config(page_title="Interactive Globe Generator", layout="wide")
-st.title("🌐 Interactive Sphere Globe (110m)")
-st.markdown("---")
+st.set_page_config(page_title="3D Globe Viewer", layout="wide")
+st.title("🌍 Interactive 3D Sphere Map")
 
-# 2. 데이터 로드 (지구본 깨짐 방지를 위해 110m 사용)
-current_folder = os.path.dirname(os.path.abspath(__file__))
-# 파일 이름이 ne_110m_land.shp 인지 확인해주세요.
-land_110m = os.path.join(current_folder, "ne_110m_land.shp")
-
-@st.cache_data
-def load_data(path):
-    if os.path.exists(path):
-        gdf = gpd.read_file(path)
-        # 구형 투영 시 대륙 깨짐 방지를 위한 버퍼 처리 ( buffer(0) )
-        gdf['geometry'] = gdf.geometry.buffer(0)
-        return gdf
-    return None
-
-world_land = load_data(land_110m)
-
-# 3. 사이드바 설정 (정면 좌표 입력)
+# 사이드바에서 관측 지점(Center) 설정
 with st.sidebar:
-    st.header("🛠️ Globe Settings")
-    st.subheader("📍 Center Position (Front View)")
-    # 사용자가 입력한 좌표를 정면으로 바라봅니다.
-    lon_center = st.number_input("Center Longitude", value=127.0, min_value=-180.0, max_value=180.0)
-    lat_center = st.number_input("Center Latitude", value=37.5, min_value=-90.0, max_value=90.0)
+    st.header("👁️ View Projection")
+    # 내가 바라보는 방향 설정
+    view_lat = st.slider("View Latitude", -90.0, 90.0, 38.0)
+    view_lon = st.slider("View Longitude", -180.0, 180.0, 127.0)
     
     st.divider()
     
-    st.subheader("📏 Grid & Design")
-    # 지구본이라 격자 간격은 넓게 가져갑니다.
-    grid_interval = st.select_slider("Grid Interval (deg)", options=[10, 15, 20, 30], value=30)
-    
-    # 정면 위치에 점 표시 여부
-    show_point = st.checkbox("Show Center Point", value=True)
+    st.subheader("📏 Grid Intervals")
+    grid_step = st.select_slider("Grid Step", options=[5, 10, 15, 30], value=10)
 
-# 4. 지도 생성 메인 로직
-if world_land is not None:
-    # --- 투영법 설정: Orthographic (지구본) ---
-    # 사용자가 입력한 좌표(central_longitude, central_latitude)를 지구의 정면으로 설정합니다.
-    target_crs = ccrs.Orthographic(central_longitude=lon_center, central_latitude=lat_center)
+# Plotly를 이용한 구형 투영
+fig = go.Figure()
 
-    # 도화지 생성 (지구본이니까 정사각형 비율)
-    fig = plt.figure(figsize=(10, 10), dpi=100)
-    ax = fig.add_subplot(1, 1, 1, projection=target_crs)
+# 1. 지구 표면 (Geo Outline) 및 격자 설정
+fig.update_geos(
+    projection_type="orthographic",  # 🛠️ 핵심: 구형 지구본 모드
+    showland=True,
+    landcolor="LightGreen",
+    showocean=True,
+    oceancolor="LightBlue",
+    showcountries=True,
+    lonaxis_showgrid=True,
+    lataxis_showgrid=True,
+    lonaxis_gridcolor="gray",
+    lataxis_gridcolor="gray",
+    lonaxis_dtick=grid_step,  # 사용자가 설정한 경도 간격
+    lataxis_dtick=grid_step,  # 사용자가 설정한 위도 간격
+    projection_rotation=dict(lon=view_lon, lat=view_lat, roll=0), # 바라보는 방향 회전
+    bgcolor="black" # 우주 느낌
+)
 
-    # 지구본 전체(Global)를 보여줍니다.
-    ax.set_global()
-    
-    # 배경 및 바다색 (옵션: 바다색을 연한 파란색으로 하려면 '#E0F7FA')
-    ax.set_facecolor('#FFFFFF')
+fig.update_layout(
+    height=800,
+    margin={"r":0,"t":0,"l":0,"b":0}
+)
 
-    # --- 그리기 ---
-    # 육지 그리기 (저해상도라 빠름)
-    world_land.plot(ax=ax, transform=ccrs.PlateCarree(), 
-                    color='#E0E0E0', edgecolor='#AAAAAA', linewidth=0.3)
-    
-    # 격자선 (구형 좌표 기준)
-    ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=False, 
-                 linestyle='--', linewidth=0.5, color='#AAAAAA', alpha=0.7)
+# 결과 출력
+st.plotly_chart(fig, use_container_width=True)
 
-    # (옵션) 지구 외곽선(테두리) 그리기
-    # ax.add_feature(cartopy.feature.OCEAN, facecolor='none', edgecolor='black', linewidth=1)
-
-    # 정면 좌표에 점 표시 (입력한 위치 확인용)
-    if show_point:
-        ax.plot(lon_center, lat_center, marker='o', color='#FF6F00', markersize=8, 
-                transform=ccrs.PlateCarree(), zorder=10, label='Center')
-        # ax.legend(loc='lower right')
-
-    # 5. 결과 표시 및 고해상도 다운로드
-    st.pyplot(fig, clear_figure=True)
-
-    # 다운로드 시에만 300 DPI 렌더링 (일러스트 작업용)
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches='tight', dpi=300, facecolor='#FFFFFF', pad_inches=0.1)
-    
-    st.download_button(
-        label=f"📥 Download High-Res Globe (300 DPI PNG)",
-        data=buf.getvalue(),
-        file_name=f"globe_{lon_center:.1f}_{lat_center:.1f}_300dpi.png",
-        mime="image/png"
-    )
-else:
-    st.error("⚠️ 110m 데이터 파일(ne_110m_land.shp)을 찾을 수 없습니다.")
-    st.info("💡 ne_110m_land.shp, ne_110m_land.shx, ne_110m_land.dbf 파일이 같은 폴더에 있어야 합니다.")
+st.info(f"💡 현재 북위 {view_lat}°, 동경 {view_lon}° 지점을 정면으로 바라보고 있습니다.")
