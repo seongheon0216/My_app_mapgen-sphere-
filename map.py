@@ -86,4 +86,18 @@ if world_land is not None:
 
     # 🛠️ PNG 빈 화면 해결: st.pyplot 호출 전에 '먼저' 버퍼에 저장
     buf = io.BytesIO()
-    fig.savefig(buf,
+    fig.savefig(buf, format="png", dpi=300, bbox_inches='tight', facecolor='white')
+    img_data = buf.getvalue()
+
+    # 화면 표시
+    st.pyplot(fig)
+
+    # 다운로드 버튼
+    st.download_button(
+        label="📥 Download Map (300 DPI)",
+        data=img_data,
+        file_name="sphere_map_300dpi.png",
+        mime="image/png"
+    )
+else:
+    st.error("⚠️ 데이터 파일을 찾을 수 없습니다. (ne_110m_land.shp 확인)")
