@@ -58,6 +58,8 @@ with st.sidebar:
     coastline_alpha = st.slider("Coastline Opacity", 0.0, 1.0, 0.4, step=0.1) if show_coastline else 1.0
     coastline_width = st.slider("Coastline Width", 0.1, 1.0, 0.5, step=0.1) if show_coastline else 0.5
 
+# ... (상단 1, 2, 3번 섹션은 기존과 동일) ...
+
 # 4. 지도 생성 로직
 if world_land is not None:
     my_globe = ccrs.Globe(ellipse='sphere')
@@ -67,7 +69,7 @@ if world_land is not None:
     ax = fig.add_subplot(1, 1, 1, projection=target_crs)
     ax.set_facecolor('#FFFFFF')
 
-    # 육지 그리기 (회색 육지 + 사용자 설정 해안선)
+    # 육지 그리기
     world_land.plot(ax=ax, transform=ccrs.PlateCarree(), 
                     color='#E8E8E8', 
                     edgecolor='#000000' if show_coastline else (0,0,0,0), 
@@ -76,21 +78,32 @@ if world_land is not None:
 
     # 격자선 설정
     if show_grid == 'Y':
-        gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True, 
+        # 🛠️ 에러 방지를 위해 gridlines 인자를 최소화했습니다.
+        gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=False, 
                           linestyle='-', linewidth=0.6, color='#AAAAAA', alpha=0.5)
-        gl.top_labels = gl.right_labels = False
-        gl.xformatter, gl.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
         gl.xlocator = mticker.MultipleLocator(lon_interval)
         gl.ylocator = mticker.MultipleLocator(lat_interval)
 
-    st.pyplot(fig, clear_figure=True)
-
-    # 300 DPI 이미지 다운로드
+    # --- 🛠️ PNG 다운로드 핵심 수정 구간 시작 ---
+    
+    # 1. 먼저 메모리 버퍼에 300 DPI로 저장 (st.pyplot 보다 앞에 와야 함)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", bbox_inches='tight', dpi=300, facecolor='#FFFFFF')
-    st.download_button(label="📥 Download Map (300 DPI)", data=buf.getvalue(), file_name="sphere_map_300dpi.png")
+    img_data = buf.getvalue()
+    
+    # 2. 그 다음에 화면에 표시
+    st.pyplot(fig)
+    
+    # 3. 다운로드 버튼에 위에서 만든 img_data 연결
+    st.download_button(
+        label="📥 Download Map (300 DPI)", 
+        data=img_data, 
+        file_name="sphere_map_300dpi.png",
+        mime="image/png"
+    )
+    
+    # --- 🛠️ 핵심 수정 구간 끝 ---
 
 else:
-    # 🛠️ 에러 발생 시 파일 목록을 출력하여 디버깅 도와줌
     st.error("⚠️ 데이터 파일을 찾을 수 없습니다.")
     st.write("현재 폴더 파일 목록:", os.listdir(os.getcwd()))
