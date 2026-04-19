@@ -80,7 +80,7 @@ if world_land is not None:
     if show_grid == 'Y':
         # 🛠️ 에러 방지를 위해 gridlines 인자를 최소화했습니다.
         gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=False, 
-                          linestyle='-', linewidth=0.6, color='#00000', alpha=0.5)
+                          linestyle='-', linewidth=0.6, color='#000000', alpha=0.5)
         gl.xlocator = mticker.MultipleLocator(lon_interval)
         gl.ylocator = mticker.MultipleLocator(lat_interval)
 
